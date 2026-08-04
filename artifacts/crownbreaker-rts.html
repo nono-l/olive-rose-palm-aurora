@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CROWNBREAKER - React RTS Recreation</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a1a;
+      overflow: hidden;
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #root {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    .game-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: #4a7c3f;
+      overflow: hidden;
+    }
+    /* Map background with subtle texture */
+    .map-bg {
+      position: absolute;
+      inset: 0;
+      background: 
+        radial-gradient(ellipse at 20% 30%, #5a8c4f 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 70%, #3d6b35 0%, transparent 40%),
+        linear-gradient(180deg, #4a7c3f 0%, #3d6b35 100%);
+    }
+    /* Dirt patches */
+    .dirt {
+      position: absolute;
+      background: #8b7355;
+      border-radius: 40%;
+      opacity: 0.7;
+    }
+    /* Trees */
+    .tree {
+      position: absolute;
+      width: 28px;
+      height: 36px;
+      background: #2d5a27;
+      border-radius: 50% 50% 40% 40%;
+      box-shadow: 0 4px 0 #1a3a18;
+    }
+    .tree::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 10px;
+      width: 8px;
+      height: 12px;
+      background: #5c4033;
+    }
+    /* Walls - orange log style */
+    .wall {
+      position: absolute;
+      background: linear-gradient(90deg, #c47a3a 0%, #e89b4f 30%, #c47a3a 60%, #a65c2a 100%);
+      border: 1px solid #8b4513;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+      border-radius: 3px;
+    }
+    .wall.horizontal {
+      height: 14px;
+    }
+    .wall.vertical {
+      width: 14px;
+    }
+    /* Buildings */
+    .building {
+      position: absolute;
+      border-radius: 4px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    .building.house {
+      width: 36px;
+      height: 32px;
+      background: linear-gradient(180deg, #d4a574 0%, #b8895a 100%);
+    }
+    .building.house .roof {
+      position: absolute;
+      top: -12px;
+      left: -4px;
+      width: 44px;
+      height: 18px;
+      background: #c0392b;
+      clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+    }
+    .building.house.blue-roof .roof {
+      background: #2980b9;
+    }
+    .building.castle {
+      width: 56px;
+      height: 48px;
+      background: linear-gradient(180deg, #7f8c8d 0%, #5d6d7e 100%);
+      border: 2px solid #34495e;
+    }
+    .building.castle .roof {
+      position: absolute;
+      top: -16px;
+      left: 8px;
+      width: 40px;
+      height: 20px;
+      background: #2980b9;
+      clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+    }
+    .building.castle .tower {
+      position: absolute;
+      top: -8px;
+      width: 14px;
+      height: 20px;
+      background: #5d6d7e;
+      border: 1px solid #34495e;
+    }
+    /* Unit groups */
+    .unit-group {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      z-index: 10;
+      transition: filter 0.15s;
+    }
+    .unit-group.selected {
+      filter: drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 12px #00ffff);
+    }
+    .unit-group .soldiers {
+      display: flex;
+      flex-wrap: wrap;
+      width: 48px;
+      justify-content: center;
+      gap: 2px;
+    }
+    .unit-group .soldier {
+      width: 10px;
+      height: 14px;
+      border-radius: 2px 2px 1px 1px;
+      position: relative;
+    }
+    .unit-group.blue .soldier {
+      background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .unit-group.red .soldier {
+      background: linear-gradient(180deg, #e74c3c 0%, #c0392b 100%);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .unit-group .soldier::before {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: 2px;
+      width: 6px;
+      height: 5px;
+      background: #f5d0a9;
+      border-radius: 50%;
+    }
+    .unit-group .unit-label {
+      position: absolute;
+      top: -72px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 5;
+    }
+    .unit-group .unit-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,1), 0 0 8px rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.7);
+      padding: 2px 9px;
+      border-radius: 8px;
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border: 1px solid rgba(255,255,255,0.25);
+    }
+    .unit-group .unit-icon {
+      font-size: 20px;
+      line-height: 1;
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
+    }
+    .unit-group .count-bubble {
+      position: absolute;
+      top: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+      white-space: nowrap;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .unit-group.blue .count-bubble {
+      background: linear-gradient(180deg, #5dade2 0%, #3498db 100%);
+      border: 1.5px solid #1a5276;
+    }
+    .unit-group.red .count-bubble {
+      background: linear-gradient(180deg, #ec7063 0%, #e74c3c 100%);
+      border: 1.5px solid #922b21;
+    }
+    /* Projectiles / bombs */
+    .projectile {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #5dade2, #1a5276);
+      border: 2px solid #0e2f44;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      box-shadow: 0 0 12px rgba(52, 152, 219, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: white;
+      font-weight: bold;
+    }
+    .projectile .dmg {
+      position: absolute;
+      top: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2c3e50;
+      color: #ecf0f1;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    /* Boss icon */
+    .boss-icon {
+      position: absolute;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #e74c3c, #7b241c);
+      border: 3px solid #922b21;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px rgba(231, 76, 60, 0.7);
+      animation: boss-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes boss-pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.08); }
+    }
+    .boss-icon::before {
+      content: '💀';
+      font-size: 22px;
+    }
+    /* UI Overlay - Mode Tabs */
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 12px;
+      z-index: 100;
+      gap: 8px;
+    }
+    .mode-tab {
+      padding: 6px 18px;
+      border-radius: 20px;
+      border: 2px solid transparent;
+      background: rgba(255,255,255,0.12);
+      color: #ecf0f1;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-tab:hover {
+      background: rgba(255,255,255,0.22);
+    }
+    .mode-tab.active {
+      background: linear-gradient(180deg, #3498db, #2980b9);
+      border-color: #1a5276;
+      box-shadow: 0 2px 8px rgba(52, 152, 219, 0.5);
+    }
+    .mode-tab.easy.active {
+      background: linear-gradient(180deg, #2ecc71, #27ae60);
+      border-color: #1e8449;
+    }
+    .mode-tab.hard.active {
+      background: linear-gradient(180deg, #e74c3c, #c0392b);
+      border-color: #922b21;
+    }
+    .game-title {
+      position: absolute;
+      left: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #f1c40f;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    }
+    .pause-btn {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      background: rgba(0,0,0,0.6);
+      border: 2px solid #bdc3c7;
+      border-radius: 8px;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      z-index: 110;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pause-btn:hover {
+      background: rgba(0,0,0,0.8);
+    }
+    /* Bottom info */
+    .bottom-info {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(0,0,0,0.65);
+      color: #f1c40f;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 100;
+      border: 1px solid rgba(241, 196, 15, 0.4);
+    }
+    /* Speed selector */
+    .speed-selector {
+      position: absolute;
+      bottom: 60px;
+      left: 12px;
+      display: flex;
+      gap: 6px;
+      z-index: 100;
+      background: rgba(0,0,0,0.55);
+      padding: 5px 7px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .speed-btn {
+      min-width: 42px;
+      height: 30px;
+      border-radius: 15px;
+      border: 2px solid transparent;
+      background: rgba(255,255,255,0.12);
+      color: #ecf0f1;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .speed-btn:hover {
+      background: rgba(255,255,255,0.22);
+    }
+    .speed-btn.active {
+      background: linear-gradient(180deg, #2ecc71, #27ae60);
+      border-color: #1e8449;
+      color: white;
+      box-shadow: 0 2px 6px rgba(39, 174, 96, 0.5);
+    }
+    /* Treasure */
+    .treasure {
+      position: absolute;
+      width: 32px;
+      height: 28px;
+      background: linear-gradient(180deg, #f39c12, #d68910);
+      border-radius: 4px;
+      border: 2px solid #9a7b0a;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      z-index: 5;
+    }
+    .treasure::before {
+      content: '📦';
+      position: absolute;
+      top: -4px;
+      left: 4px;
+      font-size: 20px;
+    }
+    /* Pause menu */
+    .pause-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pause-menu {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+    .pause-option {
+      width: 90px;
+      height: 90px;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s, filter 0.15s;
+      border: 3px solid rgba(255,255,255,0.3);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .pause-option:hover {
+      transform: scale(1.08);
+      filter: brightness(1.15);
+    }
+    .pause-option.leave {
+      background: linear-gradient(145deg, #e74c3c, #c0392b);
+    }
+    .pause-option.retry {
+      background: linear-gradient(145deg, #f39c12, #d68910);
+    }
+    .pause-option.continue {
+      background: linear-gradient(145deg, #3498db, #2980b9);
+    }
+    .pause-option .icon {
+      font-size: 32px;
+      margin-bottom: 4px;
+    }
+    .pause-option .label {
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    }
+    /* Victory screen */
+    .victory-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      animation: victory-fade 0.5s ease-out;
+    }
+    @keyframes victory-fade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .victory-box {
+      background: linear-gradient(160deg, #1a3a5c 0%, #0d2137 100%);
+      border: 4px solid #f1c40f;
+      border-radius: 24px;
+      padding: 40px 60px;
+      text-align: center;
+      box-shadow: 0 0 40px rgba(241, 196, 15, 0.4), 0 12px 40px rgba(0,0,0,0.6);
+      max-width: 90vw;
+    }
+    .victory-title {
+      font-size: 48px;
+      font-weight: 900;
+      color: #f1c40f;
+      text-shadow: 0 0 20px rgba(241, 196, 15, 0.8), 0 4px 8px rgba(0,0,0,0.5);
+      margin-bottom: 12px;
+      letter-spacing: 4px;
+      animation: victory-bounce 0.8s ease-out;
+    }
+    @keyframes victory-bounce {
+      0% { transform: scale(0.3); opacity: 0; }
+      50% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .victory-sub {
+      font-size: 20px;
+      color: #ecf0f1;
+      margin-bottom: 28px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .victory-btn {
+      padding: 14px 36px;
+      font-size: 18px;
+      font-weight: 700;
+      border-radius: 30px;
+      border: 3px solid #1e8449;
+      background: linear-gradient(180deg, #2ecc71, #27ae60);
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(39, 174, 96, 0.5);
+      transition: transform 0.15s, filter 0.15s;
+    }
+    .victory-btn:hover {
+      transform: scale(1.08);
+      filter: brightness(1.1);
+    }
+    .victory-emoji {
+      font-size: 56px;
+      margin-bottom: 8px;
+      animation: victory-spin 1.2s ease-out;
+    }
+    @keyframes victory-spin {
+      0% { transform: scale(0) rotate(-180deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    /* Warp charge indicator */
+    .warp-indicator {
+      position: absolute;
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      border: 4px solid #9b59b6;
+      background: rgba(155, 89, 182, 0.25);
+      transform: translate(-50%, -50%);
+      z-index: 25;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(155, 89, 182, 0.7);
+      animation: warp-pulse 0.8s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes warp-pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.12); }
+    }
+    .warp-indicator .warp-count {
+      font-size: 28px;
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 0 0 10px #9b59b6, 0 2px 4px rgba(0,0,0,0.8);
+    }
+
+    /* Attack range circles */
+    .range-circle {
+      position: absolute;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 3;
+    }
+    .range-circle.blue {
+      border: 2px solid rgba(52, 152, 219, 0.7);
+      background: rgba(52, 152, 219, 0.12);
+      box-shadow: 0 0 8px rgba(52, 152, 219, 0.3);
+    }
+    .range-circle.red {
+      border: 2px solid rgba(231, 76, 60, 0.7);
+      background: rgba(231, 76, 60, 0.12);
+      box-shadow: 0 0 8px rgba(231, 76, 60, 0.3);
+    }
+    .range-circle.selected {
+      border-width: 3px;
+      background: rgba(52, 152, 219, 0.2);
+    }
+    /* Selection marker */
+    .move-marker {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #00ffff;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 8;
+      animation: marker-pulse 0.8s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes marker-pulse {
+      0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+    }
+    /* Combat effect */
+    .combat-fx {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(241,196,15,0.6) 0%, transparent 70%);
+      transform: translate(-50%, -50%);
+      z-index: 12;
+      pointer-events: none;
+      animation: combat-flash 0.4s ease-out forwards;
+    }
+    @keyframes combat-flash {
+      0% { transform: translate(-50%, -50%) scale(0.3); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+    }
+    /* Instructions */
+    .instructions {
+      position: absolute;
+      top: 48px;
+      left: 12px;
+      background: rgba(0,0,0,0.6);
+      color: #ecf0f1;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.5;
+      z-index: 90;
+      max-width: 220px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .instructions strong {
+      color: #5dade2;
+    }
+    .instructions .close-btn {
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      color: #ecf0f1;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      line-height: 22px;
+      padding: 0;
+      text-align: center;
+    }
+    .instructions .close-btn:hover {
+      background: rgba(231, 76, 60, 0.8);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // Simple ID generator
+    let nextId = 1;
+    const uid = () => nextId++;
+
+    // Map dimensions (virtual)
+    const MAP_W = 1200;
+    const MAP_H = 800;
+
+    // Initial walls (from video style - enclosures)
+    const WALLS = [
+      // Main base walls (center-ish)
+      { x: 480, y: 180, w: 240, h: 14, type: 'h' },
+      { x: 480, y: 180, w: 14, h: 200, type: 'v' },
+      { x: 706, y: 180, w: 14, h: 200, type: 'v' },
+      { x: 480, y: 366, w: 240, h: 14, type: 'h' },
+      // Left enclosure
+      { x: 120, y: 320, w: 180, h: 14, type: 'h' },
+      { x: 120, y: 320, w: 14, h: 160, type: 'v' },
+      { x: 286, y: 320, w: 14, h: 160, type: 'v' },
+      { x: 120, y: 466, w: 180, h: 14, type: 'h' },
+      // Right side
+      { x: 820, y: 280, w: 200, h: 14, type: 'h' },
+      { x: 820, y: 280, w: 14, h: 180, type: 'v' },
+      { x: 1006, y: 280, w: 14, h: 180, type: 'v' },
+      { x: 820, y: 446, w: 200, h: 14, type: 'h' },
+      // Extra segments for maze-like feel
+      { x: 350, y: 500, w: 160, h: 14, type: 'h' },
+      { x: 350, y: 500, w: 14, h: 120, type: 'v' },
+      { x: 496, y: 500, w: 14, h: 120, type: 'v' },
+      { x: 600, y: 100, w: 14, h: 80, type: 'v' },
+      { x: 200, y: 150, w: 120, h: 14, type: 'h' },
+    ];
+
+    // Buildings
+    const BUILDINGS = [
+      { x: 560, y: 240, type: 'castle' },
+      { x: 180, y: 380, type: 'house', roof: 'red' },
+      { x: 880, y: 340, type: 'house', roof: 'blue' },
+      { x: 400, y: 540, type: 'house', roof: 'red' },
+      { x: 700, y: 140, type: 'house', roof: 'blue' },
+      { x: 250, y: 200, type: 'house', roof: 'red' },
+      { x: 950, y: 480, type: 'house', roof: 'red' },
+    ];
+
+    // Dirt patches
+    const DIRTS = [
+      { x: 300, y: 250, w: 120, h: 80 },
+      { x: 650, y: 400, w: 150, h: 100 },
+      { x: 150, y: 500, w: 100, h: 70 },
+      { x: 850, y: 150, w: 90, h: 60 },
+      { x: 500, y: 550, w: 130, h: 90 },
+    ];
+
+    // Trees
+    const TREES = [
+      { x: 80, y: 120 }, { x: 1100, y: 90 }, { x: 60, y: 600 },
+      { x: 1050, y: 650 }, { x: 400, y: 80 }, { x: 900, y: 580 },
+      { x: 250, y: 650 }, { x: 750, y: 50 }, { x: 550, y: 700 },
+    ];
+
+    // Helper: distance
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    // Helper: move towards
+    const moveTowards = (from, to, speed) => {
+      const d = dist(from, to);
+      if (d < 1) return { ...from };
+      const ratio = Math.min(speed / d, 1);
+      return {
+        x: from.x + (to.x - from.x) * ratio,
+        y: from.y + (to.y - from.y) * ratio,
+      };
+    };
+
+    // デフォルト設定（JSONが無い場合に自動生成）
+    const DEFAULT_CONFIG = {
+      gameTitle: "吸収大作戦",
+      modes: [
+        { id: "easy", name: "かんたん", description: "敵が少なくて遅いよ" },
+        { id: "normal", name: "ふつう", description: "バランス型" },
+        { id: "hard", name: "むずかしい", description: "敵が多くて速い！" }
+      ],
+      defaultMode: "easy",
+      units: {
+        easy: [
+          { id: "hero1", name: "ゆうしゃくん", side: "blue", count: 95, x: 180, y: 340, speed: 1.3, icon: "🛡️", range: 60 },
+          { id: "hero2", name: "まほうつかい", side: "blue", count: 28, x: 260, y: 410, speed: 1.0, icon: "🪄", range: 120 },
+          { id: "hero3", name: "けんし", side: "blue", count: 52, x: 140, y: 270, speed: 1.9, icon: "⚔️", range: 55 },
+          { id: "hero_echigoya", name: "えちごや", side: "blue", count: 40, x: 220, y: 480, speed: 1.4, icon: "💣", range: 55, skill: "bomb" },
+          { id: "enemy1", name: "スライム", side: "red", count: 42, x: 880, y: 340, speed: 0.4, icon: "🟢" },
+          { id: "enemy2", name: "コウモリ", side: "red", count: 24, x: 840, y: 440, speed: 1.5, icon: "🦇" },
+          { id: "enemy3", name: "ゴブリン", side: "red", count: 22, x: 940, y: 250, speed: 0.75, icon: "👺" },
+          { id: "enemy4", name: "おばけ", side: "red", count: 24, x: 780, y: 500, speed: 0.65, icon: "👻" },
+          { id: "enemy5", name: "ちびドラゴン", side: "red", count: 16, x: 990, y: 400, speed: 0.5, icon: "🐉" }
+        ],
+        normal: [
+          { id: "hero1", name: "ゆうしゃくん", side: "blue", count: 80, x: 180, y: 340, speed: 1.3, icon: "🛡️", range: 60 },
+          { id: "hero2", name: "まほうつかい", side: "blue", count: 25, x: 260, y: 410, speed: 1.0, icon: "🪄", range: 120 },
+          { id: "hero3", name: "けんし", side: "blue", count: 45, x: 140, y: 270, speed: 1.85, icon: "⚔️", range: 55 },
+          { id: "enemy1", name: "スライム", side: "red", count: 60, x: 880, y: 340, speed: 0.4, icon: "🟢" },
+          { id: "enemy2", name: "コウモリ", side: "red", count: 36, x: 840, y: 440, speed: 1.5, icon: "🦇" },
+          { id: "enemy3", name: "ゴブリン", side: "red", count: 38, x: 940, y: 250, speed: 0.75, icon: "👺" },
+          { id: "enemy4", name: "おばけ", side: "red", count: 43, x: 780, y: 500, speed: 0.65, icon: "👻" },
+          { id: "enemy5", name: "ドラゴン", side: "red", count: 33, x: 990, y: 400, speed: 0.55, icon: "🐉" }
+        ],
+        hard: [
+          { id: "hero1", name: "ゆうしゃくん", side: "blue", count: 65, x: 180, y: 340, speed: 1.25, icon: "🛡️", range: 60 },
+          { id: "hero2", name: "まほうつかい", side: "blue", count: 7, x: 260, y: 410, speed: 1.0, icon: "🪄", range: 120 },
+          { id: "hero3", name: "けんし", side: "blue", count: 38, x: 140, y: 270, speed: 1.8, icon: "⚔️", range: 55 },
+          { id: "enemy1", name: "キングスライム", side: "red", count: 91, x: 880, y: 340, speed: 0.35, icon: "🟢" },
+          { id: "enemy2", name: "バンパイア", side: "red", count: 50, x: 840, y: 440, speed: 1.55, icon: "🦇" },
+          { id: "enemy3", name: "オーガ", side: "red", count: 75, x: 940, y: 250, speed: 0.45, icon: "👺" },
+          { id: "enemy4", name: "リッチ", side: "red", count: 50, x: 780, y: 500, speed: 0.55, icon: "👻" },
+          { id: "enemy5", name: "レッドドラゴン", side: "red", count: 52, x: 990, y: 400, speed: 0.5, icon: "🐉" },
+          { id: "enemy6", name: "ゴーレム", side: "red", count: 54, x: 700, y: 200, speed: 0.3, icon: "🗿" }
+        ]
+      }
+    };
+
+    // 設定から部隊リストを生成
+    // キャラ作成用：JSONで使える主な項目
+    // name, icon, side(blue/red), count, x, y, speed, range,
+    // skill: "bomb" | "warp" | null
+    // skills: ["bomb","warp"] 複数可
+    // bombDamage: 爆弾ダメージ下限目安
+    // chipRate: 長射程削り倍率（省略時は全体設定）
+    // scale: 見た目の大きさ (1.0が標準)
+    const createUnitsFromConfig = (config, modeId) => {
+      const list = (config.units && config.units[modeId]) || config.units.easy || [];
+      return list.map(u => {
+        const isMage = u.name === "まほうつかい" || u.icon === "🪄";
+        const defaultRange = isMage ? 120 : (u.side === "blue" ? 55 : 50);
+        // skill / skills 両対応
+        let skills = [];
+        if (Array.isArray(u.skills)) skills = [...u.skills];
+        if (u.skill) skills.push(u.skill);
+        if (isMage && !skills.includes("warp")) skills.push("warp");
+        skills = [...new Set(skills.filter(Boolean))];
+
+        return {
+          id: u.id || uid(),
+          name: u.name || (u.side === "blue" ? "味方" : "敵"),
+          icon: u.icon || (u.side === "blue" ? "⚔️" : "👹"),
+          x: u.x ?? 200,
+          y: u.y ?? 300,
+          count: Math.max(1, u.count ?? 30),
+          color: u.side === "blue" ? "blue" : "red",
+          target: null,
+          speed: u.speed ?? (u.side === "blue" ? 1.5 : 0.7),
+          range: u.range ?? defaultRange,
+          skill: skills[0] || null, // 後方互換
+          skills,
+          bombDamage: u.bombDamage ?? 20,
+          chipRate: u.chipRate ?? null, // nullなら全体共通レート
+          scale: u.scale ?? 1.0,
+        };
+      });
+    };
+
+    function App() {
+      const [paused, setPaused] = useState(false);
+      const [selectedId, setSelectedId] = useState(null);
+      const [moveMarker, setMoveMarker] = useState(null);
+      const [combatFx, setCombatFx] = useState([]);
+      const [projectiles, setProjectiles] = useState([]);
+      const [gameSpeed, setGameSpeed] = useState(1);
+      const [won, setWon] = useState(false);
+      const [config, setConfig] = useState(DEFAULT_CONFIG);
+      const [currentMode, setCurrentMode] = useState(DEFAULT_CONFIG.defaultMode || "easy");
+      const [configLoaded, setConfigLoaded] = useState(false);
+      const [showHelp, setShowHelp] = useState(true);
+      // まほうつかいのワープ用
+      const [warpCharge, setWarpCharge] = useState(null); // { x, y, count }
+      const warpTimerRef = useRef(null);
+      const warpTargetRef = useRef(null);
+
+      // 部隊初期化
+      const [units, setUnits] = useState(() => createUnitsFromConfig(DEFAULT_CONFIG, DEFAULT_CONFIG.defaultMode || "easy"));
+
+      const unitsRef = useRef(units);
+      const selectedRef = useRef(selectedId);
+      const pausedRef = useRef(paused);
+      const gameSpeedRef = useRef(gameSpeed);
+      const currentModeRef = useRef(currentMode);
+      const frameRef = useRef(0);
+
+      useEffect(() => { unitsRef.current = units; }, [units]);
+      useEffect(() => { selectedRef.current = selectedId; }, [selectedId]);
+      useEffect(() => { pausedRef.current = paused; }, [paused]);
+      useEffect(() => { gameSpeedRef.current = gameSpeed; }, [gameSpeed]);
+      useEffect(() => { currentModeRef.current = currentMode; }, [currentMode]);
+
+      // JSON設定を読み込み（見つからなければ自動生成のDEFAULTを使う）
+      useEffect(() => {
+        fetch("./units-config.json")
+          .then(res => {
+            if (!res.ok) throw new Error("not found");
+            return res.json();
+          })
+          .then(data => {
+            setConfig(data);
+            const mode = data.defaultMode || "easy";
+            setCurrentMode(mode);
+            setUnits(createUnitsFromConfig(data, mode));
+            setConfigLoaded(true);
+            setWon(false);
+            setSelectedId(null);
+          })
+          .catch(() => {
+            // JSONが無い場合はデフォルトをそのまま使う
+            setConfigLoaded(true);
+          });
+      }, []);
+
+      // モード切替
+      const switchMode = (modeId) => {
+        if (modeId === currentMode) return;
+        setCurrentMode(modeId);
+        setUnits(createUnitsFromConfig(config, modeId));
+        setWon(false);
+        setSelectedId(null);
+        setProjectiles([]);
+        setPaused(false);
+        if (warpTimerRef.current) clearInterval(warpTimerRef.current);
+        setWarpCharge(null);
+      };
+
+      // もう一回遊ぶ
+      const playAgain = () => {
+        setUnits(createUnitsFromConfig(config, currentMode));
+        setWon(false);
+        setSelectedId(null);
+        setProjectiles([]);
+        setPaused(false);
+        if (warpTimerRef.current) clearInterval(warpTimerRef.current);
+        setWarpCharge(null);
+      };
+
+      // Game loop
+      useEffect(() => {
+        let animId;
+        const tick = () => {
+          if (!pausedRef.current) {
+            frameRef.current++;
+            updateGame();
+          }
+          animId = requestAnimationFrame(tick);
+        };
+        animId = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(animId);
+      }, []);
+
+      const updateGame = useCallback(() => {
+        const speedMul = gameSpeedRef.current;
+
+        setUnits(prev => {
+          let next = prev.map(u => ({ ...u }));
+          const blue = next.filter(u => u.color === 'blue' && u.count > 0);
+          const red = next.filter(u => u.color === 'red' && u.count > 0);
+
+          // Move units toward targets (scaled by gameSpeed)
+          const mode = currentModeRef.current;
+          next = next.map(u => {
+            if (u.count <= 0) return u;
+            if (u.target) {
+              const pos = moveTowards(u, u.target, u.speed * speedMul);
+              const reached = dist(pos, u.target) < 8;
+              return { ...u, x: pos.x, y: pos.y, target: reached ? null : u.target };
+            }
+            // Red AI: 自分より数が少ない味方を優先して狙う
+            // 「かんたん」モードだけは、自分より大きくても最寄りの味方を追いかける（子供向け）
+            if (u.color === 'red' && blue.length > 0) {
+              // 自分より弱い（countが少ない）青部隊を探す
+              const weakerTargets = blue.filter(b => b.count < u.count);
+              let target = null;
+
+              if (weakerTargets.length > 0) {
+                // 弱い中で一番近いものを狙う
+                target = weakerTargets.reduce((a, b) => dist(u, a) < dist(u, b) ? a : b);
+              } else if (mode === "easy") {
+                // かんたんモードのみ：強い相手でも最寄りを追う（勝手にやられてくれる）
+                target = blue.reduce((a, b) => dist(u, a) < dist(u, b) ? a : b);
+              }
+              // ふつう・むずかしいで弱い相手がいない場合は動かない（逃げないが突撃もしない）
+
+              if (target && dist(u, target) > 40) {
+                const pos = moveTowards(u, target, u.speed * 0.7 * speedMul);
+                return { ...u, x: pos.x, y: pos.y };
+              }
+            }
+            return u;
+          });
+
+          // 攻撃範囲を使った戦闘
+          // ・お互いの範囲内 → 大きい方が小さい方を吸収
+          // ・片方の範囲だけ → 範囲内に捉えている側が相手を少し減らせる（小さい方でもOK）
+          const fx = [];
+          for (let i = 0; i < next.length; i++) {
+            for (let j = i + 1; j < next.length; j++) {
+              const a = next[i], b = next[j];
+              if (a.color === b.color || a.count <= 0 || b.count <= 0) continue;
+
+              const d = dist(a, b);
+              const aRange = a.range || 50;
+              const bRange = b.range || 50;
+              const aCanHit = d <= aRange;
+              const bCanHit = d <= bRange;
+
+              if (!aCanHit && !bCanHit) continue;
+
+              // 双方の範囲内 → 吸収（大きい方が増えて小さい方が減る）
+              if (aCanHit && bCanHit) {
+                let strongIdx, weakIdx;
+                if (a.count > b.count) {
+                  strongIdx = i; weakIdx = j;
+                } else if (b.count > a.count) {
+                  strongIdx = j; weakIdx = i;
+                } else {
+                  strongIdx = a.color === 'blue' ? i : j;
+                  weakIdx = strongIdx === i ? j : i;
+                }
+                const strong = next[strongIdx];
+                const weak = next[weakIdx];
+                const baseRate = 0.025 * speedMul;
+                const diffBonus = Math.min(0.03, (strong.count - weak.count) / 500);
+                let absorb = Math.max(1, Math.floor(weak.count * (baseRate + diffBonus)));
+                absorb = Math.min(absorb, weak.count);
+                next[strongIdx] = { ...strong, count: strong.count + absorb };
+                next[weakIdx] = { ...weak, count: Math.max(0, weak.count - absorb) };
+              }
+              // 片方の範囲だけ → 近接の約1/12速度で削る（吸収はしない）
+              // Math.max(1, ...) だと毎フレーム最低1になり速すぎるので、確率で1削る方式
+              else {
+                const chipRate = 0.002 * speedMul; // 近接0.025の約1/12
+                // a only hits b
+                if (aCanHit && !bCanHit) {
+                  const chance = b.count * chipRate; // 例: 50体 × 0.002 = 0.1 → 10フレームに1回程度
+                  if (Math.random() < chance) {
+                    next[j] = { ...b, count: Math.max(0, b.count - 1) };
+                  }
+                }
+                // b only hits a
+                if (bCanHit && !aCanHit) {
+                  const chance = a.count * chipRate;
+                  if (Math.random() < chance) {
+                    next[i] = { ...a, count: Math.max(0, a.count - 1) };
+                  }
+                }
+              }
+
+              if (frameRef.current % Math.max(3, Math.floor(10 / speedMul)) === 0) {
+                fx.push({ id: uid(), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+              }
+            }
+          }
+
+          if (fx.length) {
+            setCombatFx(prev => [...prev, ...fx].slice(-8));
+            setTimeout(() => {
+              setCombatFx(curr => curr.filter(f => !fx.find(nf => nf.id === f.id)));
+            }, 400);
+          }
+
+          // Remove dead (absorbed completely)
+          next = next.filter(u => u.count > 0);
+
+          // Win check: no red units left
+          const remainingRed = next.filter(u => u.color === 'red').length;
+          if (remainingRed === 0 && next.some(u => u.color === 'blue')) {
+            setWon(true);
+          }
+
+          return next;
+        });
+
+        // Update projectiles (still reduce enemy count, no absorb from bomb)
+        setProjectiles(prev => {
+          return prev.map(p => {
+            const pos = moveTowards(p, p.target, 4.5 * speedMul);
+            const reached = dist(pos, p.target) < 10;
+            if (reached) {
+              setUnits(us => us.map(u => {
+                if (u.color === 'red' && dist(u, p.target) < 60) {
+                  return { ...u, count: Math.max(0, u.count - p.dmg) };
+                }
+                return u;
+              }));
+              return null;
+            }
+            return { ...p, x: pos.x, y: pos.y };
+          }).filter(Boolean);
+        });
+      }, []);
+
+      // 選択中がまほうつかいか判定
+      const isWarpUnitSelected = () => {
+        const sel = unitsRef.current.find(u => u.id === selectedRef.current);
+        if (!sel) return false;
+        const skills = sel.skills || (sel.skill ? [sel.skill] : []);
+        return skills.includes("warp") || sel.name === "まほうつかい" || sel.icon === "🪄";
+      };
+
+      // マップ座標取得
+      const getMapPos = (e, el) => {
+        const rect = el.getBoundingClientRect();
+        const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
+        const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY);
+        const scaleX = MAP_W / rect.width;
+        const scaleY = MAP_H / rect.height;
+        return {
+          x: (clientX - rect.left) * scaleX,
+          y: (clientY - rect.top) * scaleY
+        };
+      };
+
+      // ワープキャンセル
+      const cancelWarp = () => {
+        if (warpTimerRef.current) {
+          clearInterval(warpTimerRef.current);
+          warpTimerRef.current = null;
+        }
+        setWarpCharge(null);
+        warpTargetRef.current = null;
+      };
+
+      // 長押し開始（まほうつかい専用ワープ）／通常移動
+      // 部隊本体のタップは部隊側で stopPropagation しているので、ここは空地のみ届く
+      const handleMapPointerDown = (e) => {
+        if (paused || won) return;
+        const el = e.currentTarget;
+        const { x: mx, y: my } = getMapPos(e, el);
+
+        // まほうつかい選択中 → 長押しでワープチャージ開始
+        if (selectedRef.current && isWarpUnitSelected()) {
+          cancelWarp();
+          warpTargetRef.current = { x: mx, y: my };
+          setWarpCharge({ x: mx, y: my, count: 4 });
+          let count = 4;
+          warpTimerRef.current = setInterval(() => {
+            count -= 1;
+            if (count <= 0) {
+              clearInterval(warpTimerRef.current);
+              warpTimerRef.current = null;
+              const target = warpTargetRef.current;
+              if (target) {
+                // ワープ実行
+                setUnits(prev => prev.map(u =>
+                  u.id === selectedRef.current
+                    ? { ...u, x: target.x, y: target.y, target: null }
+                    : u
+                ));
+                setMoveMarker({ x: target.x, y: target.y, id: uid() });
+                setTimeout(() => setMoveMarker(null), 600);
+              }
+              setWarpCharge(null);
+              warpTargetRef.current = null;
+            } else {
+              setWarpCharge(prev => prev ? { ...prev, count } : null);
+            }
+          }, 1000); // 1秒ごとにカウント
+          return;
+        }
+
+        // 通常の移動指示（短押し扱い）
+        if (selectedRef.current) {
+          setUnits(prev => prev.map(u =>
+            u.id === selectedRef.current ? { ...u, target: { x: mx, y: my } } : u
+          ));
+          setMoveMarker({ x: mx, y: my, id: uid() });
+          setTimeout(() => setMoveMarker(null), 800);
+        }
+      };
+
+      // 指を離したら：ワープ未完了なら通常移動に切り替え
+      const handleMapPointerUp = () => {
+        if (warpTimerRef.current && warpTargetRef.current) {
+          // 短押し扱い → 通常の移動指示
+          const { x, y } = warpTargetRef.current;
+          setUnits(prev => prev.map(u =>
+            u.id === selectedRef.current ? { ...u, target: { x, y } } : u
+          ));
+          setMoveMarker({ x, y, id: uid() });
+          setTimeout(() => setMoveMarker(null), 800);
+          cancelWarp();
+        }
+      };
+
+      // 古いクリックも残す（互換）
+      const handleMapClick = (e) => {
+        // pointerdown で処理済みのため何もしない（長押しと競合防止）
+      };
+
+      // Launch a bomb (skill)
+      const launchBomb = useCallback(() => {
+        if (pausedRef.current || !selectedRef.current) return;
+        // bombスキル持ちのみ（えちごやはかんたん配置だが、スキル自体はモード制限なし）
+        const sel = unitsRef.current.find(u => u.id === selectedRef.current);
+        if (!sel) return;
+        const skills = sel.skills || (sel.skill ? [sel.skill] : []);
+        if (!skills.includes("bomb")) return;
+        const reds = unitsRef.current.filter(u => u.color === 'red');
+        if (reds.length === 0) return;
+        const nearest = reds.reduce((a, b) => dist(sel, a) < dist(sel, b) ? a : b);
+        const base = sel.bombDamage || 20;
+        setProjectiles(prev => [...prev, {
+          id: uid(),
+          x: sel.x,
+          y: sel.y,
+          target: { x: nearest.x, y: nearest.y },
+          dmg: base + Math.floor(Math.random() * 15),
+        }]);
+      }, []);
+
+      // Space key for bomb
+      useEffect(() => {
+        const onKey = (e) => {
+          if (e.code === 'Space') {
+            e.preventDefault();
+            launchBomb();
+          }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [launchBomb]);
+
+      // Scale to fit screen
+      const [scale, setScale] = useState(1);
+      useEffect(() => {
+        const updateScale = () => {
+          const sx = window.innerWidth / MAP_W;
+          const sy = window.innerHeight / MAP_H;
+          setScale(Math.min(sx, sy));
+        };
+        updateScale();
+        window.addEventListener('resize', updateScale);
+        return () => window.removeEventListener('resize', updateScale);
+      }, []);
+
+      const remainingEnemies = units.filter(u => u.color === 'red').length;
+      const totalBlue = units.filter(u => u.color === 'blue').reduce((s, u) => s + u.count, 0);
+
+      return (
+        <div className="game-container">
+          <div className="map-bg" />
+
+          {/* Scaled map content */}
+          <div
+            style={{
+              position: 'absolute',
+              width: MAP_W,
+              height: MAP_H,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              left: (window.innerWidth - MAP_W * scale) / 2,
+              top: (window.innerHeight - MAP_H * scale) / 2,
+            }}
+            onMouseDown={handleMapPointerDown}
+            onMouseUp={handleMapPointerUp}
+            onMouseLeave={handleMapPointerUp}
+            onTouchStart={handleMapPointerDown}
+            onTouchEnd={handleMapPointerUp}
+          >
+            {/* Dirt */}
+            {DIRTS.map((d, i) => (
+              <div key={i} className="dirt" style={{ left: d.x, top: d.y, width: d.w, height: d.h }} />
+            ))}
+
+            {/* Trees */}
+            {TREES.map((t, i) => (
+              <div key={i} className="tree" style={{ left: t.x, top: t.y }} />
+            ))}
+
+            {/* Walls */}
+            {WALLS.map((w, i) => (
+              <div
+                key={i}
+                className={`wall ${w.type === 'h' ? 'horizontal' : 'vertical'}`}
+                style={{ left: w.x, top: w.y, width: w.w, height: w.h }}
+              />
+            ))}
+
+            {/* Buildings */}
+            {BUILDINGS.map((b, i) => (
+              <div
+                key={i}
+                className={`building ${b.type} ${b.roof === 'blue' ? 'blue-roof' : ''}`}
+                style={{ left: b.x, top: b.y }}
+              >
+                <div className="roof" />
+                {b.type === 'castle' && (
+                  <>
+                    <div className="tower" style={{ left: 4 }} />
+                    <div className="tower" style={{ right: 4 }} />
+                  </>
+                )}
+              </div>
+            ))}
+
+            {/* Treasure */}
+            <div className="treasure" style={{ left: 160, top: 480 }} />
+            <div className="treasure" style={{ left: 720, top: 520 }} />
+
+            {/* Attack range circles */}
+            {units.map(u => (
+              <div
+                key={"range-" + u.id}
+                className={"range-circle " + u.color + (selectedId === u.id ? " selected" : "")}
+                style={{
+                  left: u.x,
+                  top: u.y,
+                  width: (u.range || 50) * 2,
+                  height: (u.range || 50) * 2,
+                }}
+              />
+            ))}
+
+            {/* Units */}
+            {units.map(u => (
+              <div
+                key={u.id}
+                className={`unit-group ${u.color} ${selectedId === u.id ? 'selected' : ''}`}
+                style={{ left: u.x, top: u.y, transform: `translate(-50%, -50%) scale(${u.scale || 1})` }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  cancelWarp();
+                  if (u.color === 'blue') {
+                    setSelectedId(prev => prev === u.id ? null : u.id);
+                  }
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  cancelWarp();
+                  if (u.color === 'blue') {
+                    setSelectedId(prev => prev === u.id ? null : u.id);
+                  }
+                }}
+              >
+                <div className="unit-label">
+                  <div className="unit-icon">{u.icon || (u.color === 'blue' ? '⚔️' : '👹')}</div>
+                  <div className="unit-name">{u.name || (u.color === 'blue' ? '味方' : '敵')}</div>
+                </div>
+                <div className="count-bubble">{u.count}</div>
+                <div className="soldiers">
+                  {Array.from({ length: Math.min(9, Math.ceil(u.count / 10)) }).map((_, i) => (
+                    <div key={i} className="soldier" />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* Projectiles */}
+            {projectiles.map(p => (
+              <div key={p.id} className="projectile" style={{ left: p.x, top: p.y }}>
+                <div className="dmg">-{p.dmg}</div>
+              </div>
+            ))}
+
+            {/* Combat FX */}
+            {combatFx.map(f => (
+              <div key={f.id} className="combat-fx" style={{ left: f.x, top: f.y }} />
+            ))}
+
+            {/* Move marker */}
+            {moveMarker && (
+              <div className="move-marker" style={{ left: moveMarker.x, top: moveMarker.y }} />
+            )}
+
+            {/* Warp charge indicator (まほうつかい) */}
+            {warpCharge && (
+              <div className="warp-indicator" style={{ left: warpCharge.x, top: warpCharge.y }}>
+                <div className="warp-count">{warpCharge.count}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Top bar - ゲームモード切替タブ */}
+          <div className="top-bar">
+            <div className="game-title">{config.gameTitle || "吸収大作戦"}</div>
+            {(config.modes || []).map(m => (
+              <button
+                key={m.id}
+                className={`mode-tab ${m.id} ${currentMode === m.id ? 'active' : ''}`}
+                onClick={() => switchMode(m.id)}
+                title={m.description || ""}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Pause button */}
+          <button className="pause-btn" onClick={() => setPaused(p => !p)}>
+            {paused ? '▶' : '❚❚'}
+          </button>
+
+          {/* Bottom info */}
+          <div className="bottom-info">
+            敵残数：{remainingEnemies}　自軍総数：{totalBlue}
+          </div>
+
+          {/* Speed selector */}
+          <div className="speed-selector">
+            {[1, 2, 3].map(s => (
+              <button
+                key={s}
+                className={`speed-btn ${gameSpeed === s ? 'active' : ''}`}
+                onClick={() => setGameSpeed(s)}
+              >
+                x{s}
+              </button>
+            ))}
+          </div>
+
+          {/* Instructions */}
+          {!won && showHelp && (
+            <div className="instructions">
+              <button className="close-btn" onClick={() => setShowHelp(false)} title="閉じる">×</button>
+              <strong>操作方法</strong><br />
+              ・味方をクリックで選択<br />
+              ・マップをクリックで移動<br />
+              ・まほうつかい選択中に長押しでワープ<br />
+              　（4カウント後に瞬間移動！）<br />
+              ・青い円＝味方の攻撃範囲／赤い円＝敵の範囲<br />
+              ・お互いの範囲内 → 大きい方が吸収<br />
+              ・片方の範囲だけ → 小さい方でも削れる！<br />
+              ・bombスキル持ちはスペースで爆弾<br />
+              ・warpスキル持ちは長押しでワープ<br />
+              ・units-config.json でキャラ作成可能<br />
+              ・上のタブでモード変更／左下で速度<br />
+              ・敵をぜんぶ吸収すれば勝ち！
+            </div>
+          )}
+
+          {/* Victory screen */}
+          {won && (
+            <div className="victory-overlay">
+              <div className="victory-box">
+                <div className="victory-emoji">🎉</div>
+                <div className="victory-title">しょうり！</div>
+                <div className="victory-sub">敵をぜんぶ吸収したよ！すごい！</div>
+                <button className="victory-btn" onClick={playAgain}>
+                  もういっかい あそぶ
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Pause menu */}
+          {paused && !won && (
+            <div className="pause-overlay">
+              <div className="pause-menu">
+                <div className="pause-option leave" onClick={() => alert('離脱しました（デモ）')}>
+                  <div className="icon">🏃</div>
+                  <div className="label">離脱</div>
+                </div>
+                <div className="pause-option retry" onClick={playAgain}>
+                  <div className="icon">🔄</div>
+                  <div className="label">やり直し</div>
+                </div>
+                <div className="pause-option continue" onClick={() => setPaused(false)}>
+                  <div className="icon">▶</div>
+                  <div className="label">続行</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
